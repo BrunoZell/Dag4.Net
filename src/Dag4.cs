@@ -47,7 +47,9 @@ internal static class DagCrypto
         ArgumentNullException.ThrowIfNull(ecdsa);
         ArgumentNullException.ThrowIfNull(jsonMessage);
 
-        var base64Message = Convert.ToBase64String(Encoding.UTF8.GetBytes(jsonMessage));
+        var normalizedJson = L0Json.Normalize(jsonMessage)?.ToJsonString() ?? "{}";
+        var normalizedUtf8 = Encoding.UTF8.GetBytes(normalizedJson);
+        var base64Message = Convert.ToBase64String(normalizedUtf8);
         var msg = DataSignPrefix + base64Message.Length.ToString() + "\n" + base64Message;
         var msgBytes = Encoding.UTF8.GetBytes(msg);
 
@@ -67,7 +69,10 @@ internal static class DagCrypto
     {
         ArgumentNullException.ThrowIfNull(ecdsa);
         ArgumentNullException.ThrowIfNull(jsonMessage);
-        var base64Message = Convert.ToBase64String(Encoding.UTF8.GetBytes(jsonMessage));
+
+        var normalizedJson = L0Json.Normalize(jsonMessage)?.ToJsonString() ?? "{}";
+        var normalizedUtf8 = Encoding.UTF8.GetBytes(normalizedJson);
+        var base64Message = Convert.ToBase64String(normalizedUtf8);
         var msg = DataSignPrefix + base64Message.Length.ToString() + "\n" + base64Message;
         var h256 = SHA256.HashData(Encoding.UTF8.GetBytes(msg));
         var h512 = SHA512.HashData(Encoding.UTF8.GetBytes(Convert.ToHexString(h256).ToLowerInvariant()));
@@ -79,13 +84,14 @@ internal static class DagCrypto
     /// canonical JSON (sorted) -> UTF8 -> Brotli(quality=2,window=22) -> sha256 -> hex(lower) -> sha512 -> ECDSA(secp256k1, DER low-S)
     /// Returns DER signature hex lowercase.
     /// </summary>
-    internal static DerSignature SignL0(ECDsa ecdsa, string canonicalJson)
+    internal static DerSignature SignL0(ECDsa ecdsa, string jsonMessage)
     {
         ArgumentNullException.ThrowIfNull(ecdsa);
-        ArgumentNullException.ThrowIfNull(canonicalJson);
+        ArgumentNullException.ThrowIfNull(jsonMessage);
 
-        var utf8 = Encoding.UTF8.GetBytes(canonicalJson);
-        var compressed = BrotliCompress(utf8);
+        var normalizedJson = L0Json.Normalize(jsonMessage)?.ToJsonString() ?? "{}";
+        var normalizedUtf8 = Encoding.UTF8.GetBytes(normalizedJson);
+        var compressed = BrotliCompress(normalizedUtf8);
 
         var h256Bytes = SHA256.HashData(compressed);
         var h256HexLower = Convert.ToHexString(h256Bytes).ToLowerInvariant();
