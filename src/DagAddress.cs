@@ -35,7 +35,7 @@ public sealed class DagAddress
         return new DagAddress(null, pub);
     }
 
-    public string ToProofIdHex()
+    public string ToPublicKeyHex()
     {
         if (_publicKey is PublicKey pk) return pk.AsHex();
         if (_privateKey32 is byte[] d)
@@ -92,7 +92,7 @@ public sealed class DagAddress
         if (_privateKey32 is not byte[] d) throw new InvalidOperationException("This instance was not created with a private key");
         using var ecdsa = DagCrypto.CreateSecp256k1FromPrivateKey(d);
         var der = DagCrypto.SignData(ecdsa, jsonMessage);
-        return new DagDataSignature(PublicKey.FromHex(ToProofIdHex()), der);
+        return new DagDataSignature(PublicKey.FromHex(ToPublicKeyHex()), der);
     }
 
     public bool VerifyData(string jsonMessage, string signatureDerHex)

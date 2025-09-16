@@ -8,7 +8,7 @@ internal static class SigUtils
     private static readonly BigInteger N = BigInt("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
     private static readonly BigInteger HalfN = N >> 1;
 
-    public static byte[] ToDerLowS(byte[] derSignature)
+    public static byte[] NormalizeDerToLowS(ReadOnlyMemory<byte> derSignature)
     {
         var reader = new AsnReader(derSignature, AsnEncodingRules.DER);
         var seq = reader.ReadSequence();
@@ -35,7 +35,7 @@ internal static class SigUtils
         return writer.Encode();
     }
 
-    public static bool IsLowS(byte[] derSignature)
+    public static bool IsLowS(ReadOnlyMemory<byte> derSignature)
     {
         var reader = new AsnReader(derSignature, AsnEncodingRules.DER);
         var seq = reader.ReadSequence();

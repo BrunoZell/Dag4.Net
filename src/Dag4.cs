@@ -56,7 +56,7 @@ internal static class DagCrypto
         var h512 = SHA512.HashData(Encoding.UTF8.GetBytes(h256HexLower));
 
         var der = ecdsa.SignHash(h512, DSASignatureFormat.Rfc3279DerSequence);
-        var derLowS = SigUtils.ToDerLowS(der);
+        var derLowS = SigUtils.NormalizeDerToLowS(der);
         if (!ecdsa.VerifyHash(h512, derLowS, DSASignatureFormat.Rfc3279DerSequence))
             throw new InvalidOperationException("Local verify failed (data sign)");
 
@@ -92,7 +92,7 @@ internal static class DagCrypto
         var h512 = SHA512.HashData(Encoding.UTF8.GetBytes(h256HexLower));
 
         var der = ecdsa.SignHash(h512, DSASignatureFormat.Rfc3279DerSequence);
-        var derLowS = SigUtils.ToDerLowS(der);
+        var derLowS = SigUtils.NormalizeDerToLowS(der);
         if (!ecdsa.VerifyHash(h512, derLowS, DSASignatureFormat.Rfc3279DerSequence))
             throw new InvalidOperationException("Local verify failed (l0 sign)");
 
