@@ -1,4 +1,4 @@
-# Dag4.Net — .NET SDK for Constellation (DAG)
+# Dag4.Net - .NET SDK for Constellation (DAG)
 
 Slim primitives to derive DAG addresses and sign payloads in .NET.
 
@@ -48,4 +48,4 @@ Notes:
 
 ## License
 
-Apache-2.0
+MIT License
