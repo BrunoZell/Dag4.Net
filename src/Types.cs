@@ -83,7 +83,7 @@ public readonly struct DerSignature
     /// <summary>
     /// Create a DER signature from a hex string, case-insensitive.
     /// </summary>
-    public static DerSignature FromHex(string hex)
+    internal static DerSignature FromHex(string hex)
     {
         ArgumentNullException.ThrowIfNull(hex);
         var bytes = Convert.FromHexString(hex);
@@ -93,7 +93,7 @@ public readonly struct DerSignature
     /// <summary>
     /// Create a DER signature from raw bytes. A defensive copy is taken.
     /// </summary>
-    public static DerSignature FromBytes(ReadOnlySpan<byte> der)
+    internal static DerSignature FromBytes(ReadOnlySpan<byte> der)
     {
         var b = der.ToArray();
         return new DerSignature(b);
@@ -103,6 +103,7 @@ public readonly struct DerSignature
     /// Returns raw DER bytes as a read-only span (no copy).
     /// </summary>
     public ReadOnlySpan<byte> AsBytes() => _der;
+
     /// <summary>
     /// Returns the lower-cased hex encoding of the DER signature.
     /// </summary>

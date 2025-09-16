@@ -136,14 +136,14 @@ public sealed class DagAddress
 
     /// <summary>
     /// Sign canonical JSON for L0/L1 using the Brotli hashing path. Returns a DER low-S signature hex.
-    /// Input must be pre-canonicalized using CanonicalJson.SerializeToString.
+    /// Input will be normalized using L0Json.Normalize.
     /// </summary>
-    public string SignL0(string canonicalJson)
+    public DerSignature SignL0(string jsonMessage)
     {
-        ArgumentNullException.ThrowIfNull(canonicalJson);
+        ArgumentNullException.ThrowIfNull(jsonMessage);
         if (_privateKey32 is not byte[] d) throw new InvalidOperationException("This instance was not created with a private key");
         using var ecdsa = DagCrypto.CreateSecp256k1FromPrivateKey(d);
-        return DagCrypto.SignL0(ecdsa, canonicalJson).AsHex();
+        return DagCrypto.SignL0(ecdsa, jsonMessage);
     }
 
     private static byte[] Pad32(byte[] v)
