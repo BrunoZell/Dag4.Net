@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Reflection;
+using System.Text.Json.Nodes;
 
 namespace Dag4.Net;
 
@@ -9,7 +9,9 @@ namespace Dag4.Net;
 /// - Object properties sorted lexicographically
 /// - Dictionaries serialized with sorted keys
 /// - Arrays serialized in input order
-/// - Nulls preserved (no default ignore)
+/// - Null values removed from objects and dictionaries
+/// Works with custom JsonConverters by first materializing a JsonNode and then
+/// applying ordering and pruning on that DOM.
 /// </summary>
 public static class CanonicalJson
 {
@@ -23,94 +25,70 @@ public static class CanonicalJson
             PropertyNamingPolicy = null,
             DefaultIgnoreCondition = JsonIgnoreCondition.Never
         };
-        options.Converters.Add(new CanonicalObjectConverter());
         return options;
     }
 
     /// <summary>
     /// Serialize value to UTF-8 bytes using the canonical settings.
     /// </summary>
-    public static byte[] SerializeToBytes<T>(T value) => JsonSerializer.SerializeToUtf8Bytes(value, _options);
+    public static byte[] SerializeToBytes<T>(T value, JsonSerializerOptions? options = null)
+    {
+        var node = JsonSerializer.SerializeToNode(value, options ?? _options);
+        var normalized = NormalizeNode(node);
+        return System.Text.Encoding.UTF8.GetBytes(normalized?.ToJsonString() ?? "null");
+    }
     /// <summary>
     /// Serialize value to a canonical JSON string.
     /// </summary>
-    public static string SerializeToString<T>(T value) => JsonSerializer.Serialize(value, _options);
-
-    private class CanonicalObjectConverter : JsonConverter<object>
+    public static string SerializeToString<T>(T value, JsonSerializerOptions? options = null)
     {
-        public override bool CanConvert(Type typeToConvert)
+        var node = JsonSerializer.SerializeToNode(value, options ?? _options);
+        var normalized = NormalizeNode(node);
+        return normalized?.ToJsonString() ?? "null";
+    }
+
+    /// <summary>
+    /// Canonicalize an arbitrary JSON string by parsing into a JsonNode, sorting object properties
+    /// lexicographically, and removing null values.
+    /// </summary>
+    public static string Canonicalize(string json)
+    {
+        var node = JsonNode.Parse(json);
+        var normalized = NormalizeNode(node);
+        return normalized?.ToJsonString() ?? "null";
+    }
+
+    /// <summary>
+    /// Normalize a JsonNode in-place semantics by building new node instances with
+    /// lexicographically sorted properties and no null values.
+    /// </summary>
+    internal static JsonNode? NormalizeNode(JsonNode? node)
+    {
+        if (node is null || node is JsonValue) return node;
+        if (node is JsonArray arr)
         {
-            return !typeToConvert.IsPrimitive && typeToConvert != typeof(string) && typeToConvert != typeof(DateTime) &&
-                   typeToConvert != typeof(DateTimeOffset) && !typeToConvert.IsArray && !typeToConvert.IsEnum;
+            var outArr = new JsonArray();
+            foreach (var item in arr)
+            {
+                var norm = NormalizeNode(item);
+                if (norm is not null) outArr.Add(norm);
+            }
+            return outArr;
         }
-
-        public override object Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-            throw new NotSupportedException("Canonical encoder is write-only");
-
-        public override void Write(Utf8JsonWriter writer, object value, JsonSerializerOptions options)
+        if (node is JsonObject obj)
         {
-            if (value == null) { writer.WriteNullValue(); return; }
-
-            var type = value.GetType();
-            if (value is System.Collections.IDictionary dict)
+            var keys = new List<string>();
+            foreach (var kv in obj) keys.Add(kv.Key);
+            keys.Sort(StringComparer.Ordinal);
+            var outObj = new JsonObject();
+            foreach (var k in keys)
             {
-                writer.WriteStartObject();
-                var sorted = dict.Keys.Cast<object>().Select(k => k?.ToString() ?? string.Empty).OrderBy(k => k).ToArray();
-                foreach (var key in sorted)
-                {
-                    var raw = dict[key];
-                    writer.WritePropertyName(key);
-                    JsonSerializer.Serialize(writer, raw, raw?.GetType() ?? typeof(object), options);
-                }
-                writer.WriteEndObject();
-                return;
+                var v = obj[k];
+                var norm = NormalizeNode(v);
+                if (norm is not null) outObj[k] = norm;
             }
-            if (value is System.Collections.IEnumerable enumerable && type != typeof(string))
-            {
-                writer.WriteStartArray();
-                foreach (var item in enumerable)
-                {
-                    JsonSerializer.Serialize(writer, item, item?.GetType() ?? typeof(object), options);
-                }
-                writer.WriteEndArray();
-                return;
-            }
-
-            writer.WriteStartObject();
-            var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Where(p => p.CanRead)
-                .OrderBy(p => GetPropertyName(p, options))
-                .ToArray();
-
-            foreach (var property in properties)
-            {
-                var propertyValue = property.GetValue(value);
-                var propertyName = GetPropertyName(property, options);
-                if (propertyValue != null || !ShouldIgnoreNull(property, options))
-                {
-                    writer.WritePropertyName(propertyName);
-                    JsonSerializer.Serialize(writer, propertyValue, property.PropertyType, options);
-                }
-            }
-            writer.WriteEndObject();
+            return outObj;
         }
-
-        private static string GetPropertyName(PropertyInfo property, JsonSerializerOptions options)
-        {
-            var jsonPropertyName = property.GetCustomAttribute<JsonPropertyNameAttribute>();
-            if (jsonPropertyName != null) return jsonPropertyName.Name;
-            return options.PropertyNamingPolicy?.ConvertName(property.Name) ?? property.Name;
-        }
-
-        private static bool ShouldIgnoreNull(PropertyInfo property, JsonSerializerOptions options)
-        {
-            var ignoreAttribute = property.GetCustomAttribute<JsonIgnoreAttribute>();
-            if (ignoreAttribute != null)
-            {
-                return ignoreAttribute.Condition == JsonIgnoreCondition.Always ||
-                       ignoreAttribute.Condition == JsonIgnoreCondition.WhenWritingNull;
-            }
-            return options.DefaultIgnoreCondition == JsonIgnoreCondition.WhenWritingNull;
-        }
+        return node;
     }
 }
