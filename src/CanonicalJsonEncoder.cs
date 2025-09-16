@@ -39,6 +39,19 @@ public static class CanonicalJson
             if (value == null) { writer.WriteNullValue(); return; }
 
             var type = value.GetType();
+            if (value is System.Collections.IDictionary dict)
+            {
+                writer.WriteStartObject();
+                var sorted = dict.Keys.Cast<object>().Select(k => k?.ToString() ?? string.Empty).OrderBy(k => k).ToArray();
+                foreach (var key in sorted)
+                {
+                    var raw = dict[key];
+                    writer.WritePropertyName(key);
+                    JsonSerializer.Serialize(writer, raw, raw?.GetType() ?? typeof(object), options);
+                }
+                writer.WriteEndObject();
+                return;
+            }
             if (value is System.Collections.IEnumerable enumerable && type != typeof(string))
             {
                 writer.WriteStartArray();
@@ -88,4 +101,3 @@ public static class CanonicalJson
         }
     }
 }
-

@@ -3,8 +3,6 @@ using System.Text;
 
 namespace Dag4.Net;
 
-public readonly record struct DagDataSignature(string ProofIdHex, string SignatureDerHex);
-
 internal static class DagCrypto
 {
     internal const string DataSignPrefix = "\u0019Constellation Signed Data:\n";
@@ -12,10 +10,11 @@ internal static class DagCrypto
     /// <summary>
     /// Load secp256k1 ECDSA from 32-byte raw private key hex
     /// </summary>
-    internal static ECDsa CreateSecp256k1FromPrivateKeyHex(string hexPriv32)
+    internal static ECDsa CreateSecp256k1FromPrivateKeyHex(string privateKeyHex)
     {
-        byte[] d = Convert.FromHexString(hexPriv32.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
-                                          ? hexPriv32[2..] : hexPriv32);
+        ArgumentNullException.ThrowIfNull(privateKeyHex);
+        byte[] d = Convert.FromHexString(privateKeyHex.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                                          ? privateKeyHex[2..] : privateKeyHex);
         if (d.Length != 32) throw new ArgumentException("Private key must be 32 bytes.");
 
         var curve = ECCurve.CreateFromFriendlyName("secP256k1");
@@ -23,12 +22,19 @@ internal static class DagCrypto
         return ECDsa.Create(ec);
     }
 
-    internal static ECDsa CreateEcdsaFromProofIdHex(string proofIdHex)
+    internal static ECDsa CreateSecp256k1FromPrivateKey(ReadOnlySpan<byte> privateKey32)
     {
-        var xy = Convert.FromHexString(proofIdHex);
-        if (xy.Length != 64) throw new ArgumentException("Proof id must be 64 bytes (X||Y)");
-        var x = xy[..32];
-        var y = xy[32..];
+        if (privateKey32.Length != 32) throw new ArgumentOutOfRangeException(nameof(privateKey32), "Private key must be 32 bytes.");
+        var curve = ECCurve.CreateFromFriendlyName("secP256k1");
+        var ec = new ECParameters { Curve = curve, D = privateKey32.ToArray() };
+        return ECDsa.Create(ec);
+    }
+
+    internal static ECDsa CreateEcdsaFromPublicKey(PublicKey publicKey)
+    {
+        var xy = publicKey.AsBytes();
+        var x = xy[..32].ToArray();
+        var y = xy[32..].ToArray();
         return ECDsa.Create(new ECParameters
         {
             Curve = ECCurve.CreateFromFriendlyName("secP256k1"),
@@ -36,10 +42,10 @@ internal static class DagCrypto
         });
     }
 
-    internal static string SignDataDerHex(ECDsa ecdsa, string jsonMessage)
+    internal static DerSignature SignData(ECDsa ecdsa, string jsonMessage)
     {
-        if (ecdsa == null) throw new ArgumentNullException(nameof(ecdsa));
-        if (jsonMessage == null) throw new ArgumentNullException(nameof(jsonMessage));
+        ArgumentNullException.ThrowIfNull(ecdsa);
+        ArgumentNullException.ThrowIfNull(jsonMessage);
 
         var base64Message = Convert.ToBase64String(Encoding.UTF8.GetBytes(jsonMessage));
         var msg = DataSignPrefix + base64Message.Length.ToString() + "\n" + base64Message;
@@ -54,18 +60,18 @@ internal static class DagCrypto
         if (!ecdsa.VerifyHash(h512, derLowS, DSASignatureFormat.Rfc3279DerSequence))
             throw new InvalidOperationException("Local verify failed (data sign)");
 
-        return Convert.ToHexString(derLowS).ToLowerInvariant();
+        return DerSignature.FromBytes(derLowS);
     }
 
-    internal static bool VerifyData(ECDsa ecdsa, string jsonMessage, string signatureDerHex)
+    internal static bool VerifyData(ECDsa ecdsa, string jsonMessage, DerSignature signature)
     {
-        if (ecdsa == null) throw new ArgumentNullException(nameof(ecdsa));
+        ArgumentNullException.ThrowIfNull(ecdsa);
+        ArgumentNullException.ThrowIfNull(jsonMessage);
         var base64Message = Convert.ToBase64String(Encoding.UTF8.GetBytes(jsonMessage));
         var msg = DataSignPrefix + base64Message.Length.ToString() + "\n" + base64Message;
         var h256 = SHA256.HashData(Encoding.UTF8.GetBytes(msg));
         var h512 = SHA512.HashData(Encoding.UTF8.GetBytes(Convert.ToHexString(h256).ToLowerInvariant()));
-        var der = Convert.FromHexString(signatureDerHex);
-        return ecdsa.VerifyHash(h512, der, DSASignatureFormat.Rfc3279DerSequence);
+        return ecdsa.VerifyHash(h512, signature.AsBytes(), DSASignatureFormat.Rfc3279DerSequence);
     }
 
     /// <summary>
@@ -73,10 +79,10 @@ internal static class DagCrypto
     /// canonical JSON (sorted) -> UTF8 -> Brotli(quality=2,window=22) -> sha256 -> hex(lower) -> sha512 -> ECDSA(secp256k1, DER low-S)
     /// Returns DER signature hex lowercase.
     /// </summary>
-    internal static string SignL0(ECDsa ecdsa, string canonicalJson)
+    internal static DerSignature SignL0(ECDsa ecdsa, string canonicalJson)
     {
-        if (ecdsa == null) throw new ArgumentNullException(nameof(ecdsa));
-        if (canonicalJson == null) throw new ArgumentNullException(nameof(canonicalJson));
+        ArgumentNullException.ThrowIfNull(ecdsa);
+        ArgumentNullException.ThrowIfNull(canonicalJson);
 
         var utf8 = Encoding.UTF8.GetBytes(canonicalJson);
         var compressed = BrotliCompress(utf8);
@@ -90,7 +96,7 @@ internal static class DagCrypto
         if (!ecdsa.VerifyHash(h512, derLowS, DSASignatureFormat.Rfc3279DerSequence))
             throw new InvalidOperationException("Local verify failed (l0 sign)");
 
-        return Convert.ToHexString(derLowS).ToLowerInvariant();
+        return DerSignature.FromBytes(derLowS);
     }
 
     /// <summary>
@@ -98,6 +104,7 @@ internal static class DagCrypto
     /// </summary>
     internal static byte[] BrotliCompress(byte[] utf8Json)
     {
+        ArgumentNullException.ThrowIfNull(utf8Json);
         using var encoder = new System.IO.Compression.BrotliEncoder(quality: 2, window: 22);
         var maxLen = System.IO.Compression.BrotliEncoder.GetMaxCompressedLength(utf8Json.Length);
         var dst = new byte[maxLen];
