@@ -4,6 +4,13 @@ using System.Reflection;
 
 namespace Dag4.Net;
 
+/// <summary>
+/// Canonical JSON serializer producing deterministic output:
+/// - Object properties sorted lexicographically
+/// - Dictionaries serialized with sorted keys
+/// - Arrays serialized in input order
+/// - Nulls preserved (no default ignore)
+/// </summary>
 public static class CanonicalJson
 {
     private static readonly JsonSerializerOptions _options = CreateOptions();
@@ -20,7 +27,13 @@ public static class CanonicalJson
         return options;
     }
 
+    /// <summary>
+    /// Serialize value to UTF-8 bytes using the canonical settings.
+    /// </summary>
     public static byte[] SerializeToBytes<T>(T value) => JsonSerializer.SerializeToUtf8Bytes(value, _options);
+    /// <summary>
+    /// Serialize value to a canonical JSON string.
+    /// </summary>
     public static string SerializeToString<T>(T value) => JsonSerializer.Serialize(value, _options);
 
     private class CanonicalObjectConverter : JsonConverter<object>

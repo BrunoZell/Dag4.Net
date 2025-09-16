@@ -3,11 +3,17 @@ using System.Numerics;
 
 namespace Dag4.Net;
 
+/// <summary>
+/// ECDSA DER signature helpers for secp256k1: normalize to low-S and validate low-S.
+/// </summary>
 internal static class SigUtils
 {
     private static readonly BigInteger N = BigInt("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
     private static readonly BigInteger HalfN = N >> 1;
 
+    /// <summary>
+    /// Normalize a DER-encoded ECDSA signature to low-S form per secp256k1 group order.
+    /// </summary>
     public static byte[] NormalizeDerToLowS(ReadOnlyMemory<byte> derSignature)
     {
         var reader = new AsnReader(derSignature, AsnEncodingRules.DER);
@@ -35,6 +41,9 @@ internal static class SigUtils
         return writer.Encode();
     }
 
+    /// <summary>
+    /// Return true if the DER-encoded ECDSA signature already has a low S component.
+    /// </summary>
     public static bool IsLowS(ReadOnlyMemory<byte> derSignature)
     {
         var reader = new AsnReader(derSignature, AsnEncodingRules.DER);

@@ -2,6 +2,11 @@ using System.Security.Cryptography;
 
 namespace Dag4.Net;
 
+/// <summary>
+/// High-level wallet/address type for Constellation Network (DAG).
+/// Construct from a private key or public key, derive the DAG address,
+/// and sign/verify data and L0 canonical JSON without managing crypto state.
+/// </summary>
 public sealed class DagAddress
 {
     private readonly byte[]? _privateKey32; // present when constructed from private key
@@ -13,6 +18,9 @@ public sealed class DagAddress
         _publicKey = publicKey;
     }
 
+    /// <summary>
+    /// Create a wallet from a 32-byte private key hex string (optionally prefixed with 0x).
+    /// </summary>
     public static DagAddress FromPrivateKeyHex(string privateKeyHex)
     {
         ArgumentNullException.ThrowIfNull(privateKeyHex);
@@ -21,6 +29,9 @@ public sealed class DagAddress
         return new DagAddress(pk, null);
     }
 
+    /// <summary>
+    /// Create a read-only wallet from a 64-byte uncompressed public key hex (X||Y).
+    /// </summary>
     public static DagAddress FromPublicKeyHex(string publicKeyHex)
     {
         ArgumentNullException.ThrowIfNull(publicKeyHex);
@@ -28,6 +39,9 @@ public sealed class DagAddress
         return new DagAddress(null, pub);
     }
 
+    /// <summary>
+    /// Create a read-only wallet from 32-byte big-endian coordinates X and Y.
+    /// </summary>
     public static DagAddress FromPublicKeyCoordinates(ReadOnlySpan<byte> x32, ReadOnlySpan<byte> y32)
     {
         if (x32.Length != 32 || y32.Length != 32) throw new ArgumentOutOfRangeException("x32/y32", "X and Y must be 32 bytes each");
@@ -35,6 +49,9 @@ public sealed class DagAddress
         return new DagAddress(null, pub);
     }
 
+    /// <summary>
+    /// Returns the 64-byte uncompressed public key (X||Y) lower-case hex.
+    /// </summary>
     public string ToPublicKeyHex()
     {
         if (_publicKey is PublicKey pk) return pk.AsHex();
@@ -52,6 +69,13 @@ public sealed class DagAddress
         throw new InvalidOperationException("No key material present");
     }
 
+    /// <summary>
+    /// Compute the DAG address for this key material.
+    /// </summary>
+    /// <remarks>
+    /// Computes address as Base58(SHA-256(PKCS8 SubjectPublicKeyInfo(uncompressed public key)))
+    /// with checksum-derived leading digit in DAG address format.
+    /// </remarks>
     public string ToDagAddress()
     {
         PublicKey pk;
@@ -86,6 +110,9 @@ public sealed class DagAddress
         return $"DAG{checkDigit}{hash36}";
     }
 
+    /// <summary>
+    /// dag4.js-style data signing. Produces a DER low-S signature and the associated public key.
+    /// </summary>
     public DagDataSignature SignData(string jsonMessage)
     {
         ArgumentNullException.ThrowIfNull(jsonMessage);
@@ -95,6 +122,9 @@ public sealed class DagAddress
         return new DagDataSignature(PublicKey.FromHex(ToPublicKeyHex()), der);
     }
 
+    /// <summary>
+    /// Verify a DER signature produced by SignData for the given message.
+    /// </summary>
     public bool VerifyData(string jsonMessage, string signatureDerHex)
     {
         ArgumentNullException.ThrowIfNull(jsonMessage);
@@ -104,6 +134,10 @@ public sealed class DagAddress
         return DagCrypto.VerifyData(ecdsa, jsonMessage, DerSignature.FromHex(signatureDerHex));
     }
 
+    /// <summary>
+    /// Sign canonical JSON for L0/L1 using the Brotli hashing path. Returns a DER low-S signature hex.
+    /// Input must be pre-canonicalized using CanonicalJson.SerializeToString.
+    /// </summary>
     public string SignL0(string canonicalJson)
     {
         ArgumentNullException.ThrowIfNull(canonicalJson);
