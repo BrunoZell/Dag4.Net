@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Formats.Asn1;
+
 namespace Dag4.Net;
 
 /// <summary>
@@ -82,19 +85,25 @@ public readonly struct DerSignature
 
     /// <summary>
     /// Create a DER signature from a hex string, case-insensitive.
+    /// Validates ASN.1 DER SEQUENCE of two INTEGERs; throws FormatException if invalid.
     /// </summary>
     internal static DerSignature FromHex(string hex)
     {
         ArgumentNullException.ThrowIfNull(hex);
         var bytes = Convert.FromHexString(hex);
+        if (!TryValidateDer(bytes)) throw new FormatException("Invalid ECDSA DER signature.");
         return new DerSignature(bytes);
     }
 
     /// <summary>
     /// Create a DER signature from raw bytes. A defensive copy is taken.
+    /// In DEBUG builds, asserts that input is a valid ECDSA DER signature.
     /// </summary>
     internal static DerSignature FromBytes(ReadOnlySpan<byte> der)
     {
+#if DEBUG
+        Debug.Assert(TryValidateDer(der), "Invalid ECDSA DER signature passed to DerSignature.FromBytes");
+#endif
         var b = der.ToArray();
         return new DerSignature(b);
     }
@@ -102,10 +111,32 @@ public readonly struct DerSignature
     /// <summary>
     /// Returns raw DER bytes as a read-only span (no copy).
     /// </summary>
-    public ReadOnlySpan<byte> AsBytes() => _der;
+    public ReadOnlySpan<byte> AsAsn1DerBytes() => _der;
 
     /// <summary>
     /// Returns the lower-cased hex encoding of the DER signature.
     /// </summary>
-    public string AsHex() => Convert.ToHexString(_der).ToLowerInvariant();
+    public string AsAsn1DerHex() => Convert.ToHexString(_der).ToLowerInvariant();
+
+    private static bool TryValidateDer(ReadOnlySpan<byte> der)
+    {
+        try
+        {
+            var reader = new AsnReader(der.ToArray(), AsnEncodingRules.DER);
+            var seq = reader.ReadSequence();
+            // R
+            var r = seq.ReadIntegerBytes();
+            if (r.Span.Length == 0) return false;
+            // S
+            var s = seq.ReadIntegerBytes();
+            if (s.Span.Length == 0) return false;
+            seq.ThrowIfNotEmpty();
+            reader.ThrowIfNotEmpty();
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }
