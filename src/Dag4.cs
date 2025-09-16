@@ -3,12 +3,16 @@ using System.Text;
 
 namespace Dag4.Net;
 
+/// <summary>
+/// Internal cryptographic helpers for DAG signatures.
+/// Not part of the public API; subject to change.
+/// </summary>
 internal static class DagCrypto
 {
     internal const string DataSignPrefix = "\u0019Constellation Signed Data:\n";
 
     /// <summary>
-    /// Load secp256k1 ECDSA from 32-byte raw private key hex
+    /// Create a secp256k1 ECDSA from a 32-byte private key hex (optionally prefixed with 0x).
     /// </summary>
     internal static ECDsa CreateSecp256k1FromPrivateKeyHex(string privateKeyHex)
     {
@@ -22,6 +26,10 @@ internal static class DagCrypto
         return ECDsa.Create(ec);
     }
 
+    /// <summary>
+    /// Create a secp256k1 ECDSA from a 32-byte private key as a read-only span.
+    /// The span must contain exactly 32 bytes.
+    /// </summary>
     internal static ECDsa CreateSecp256k1FromPrivateKey(ReadOnlySpan<byte> privateKey32)
     {
         if (privateKey32.Length != 32) throw new ArgumentOutOfRangeException(nameof(privateKey32), "Private key must be 32 bytes.");
@@ -30,6 +38,9 @@ internal static class DagCrypto
         return ECDsa.Create(ec);
     }
 
+    /// <summary>
+    /// Create a secp256k1 ECDSA public key from a 64-byte X||Y public key.
+    /// </summary>
     internal static ECDsa CreateEcdsaFromPublicKey(PublicKey publicKey)
     {
         var xy = publicKey.AsBytes();
@@ -42,6 +53,13 @@ internal static class DagCrypto
         });
     }
 
+    /// <summary>
+    /// Sign a normalized JSON message using dag4.js-compatible data signing.
+    /// - Normalize input JSON (L0Json)
+    /// - Base64 the UTF-8 bytes, prefix and length
+    /// - Hash (sha256 then hex lower -> sha512)
+    /// - ECDSA sign (DER, low-S)
+    /// </summary>
     internal static DerSignature SignData(ECDsa ecdsa, string jsonMessage)
     {
         ArgumentNullException.ThrowIfNull(ecdsa);
@@ -65,6 +83,9 @@ internal static class DagCrypto
         return DerSignature.FromBytes(derLowS);
     }
 
+    /// <summary>
+    /// Verify a dag4.js-style data signature against a normalized JSON message.
+    /// </summary>
     internal static bool VerifyData(ECDsa ecdsa, string jsonMessage, DerSignature signature)
     {
         ArgumentNullException.ThrowIfNull(ecdsa);
@@ -76,13 +97,12 @@ internal static class DagCrypto
         var msg = DataSignPrefix + base64Message.Length.ToString() + "\n" + base64Message;
         var h256 = SHA256.HashData(Encoding.UTF8.GetBytes(msg));
         var h512 = SHA512.HashData(Encoding.UTF8.GetBytes(Convert.ToHexString(h256).ToLowerInvariant()));
-        return ecdsa.VerifyHash(h512, signature.AsBytes(), DSASignatureFormat.Rfc3279DerSequence);
+        return ecdsa.VerifyHash(h512, signature.AsAsn1DerBytes(), DSASignatureFormat.Rfc3279DerSequence);
     }
 
     /// <summary>
     /// Brotli-based signing for L0/L1 transactions (AllowSpend, etc.):
-    /// canonical JSON (sorted) -> UTF8 -> Brotli(quality=2,window=22) -> sha256 -> hex(lower) -> sha512 -> ECDSA(secp256k1, DER low-S)
-    /// Returns DER signature hex lowercase.
+    /// Normalize JSON -> UTF8 -> Brotli(quality=2,window=22) -> sha256 -> hex(lower) -> sha512 -> ECDSA(secp256k1, DER low-S)
     /// </summary>
     internal static DerSignature SignL0(ECDsa ecdsa, string jsonMessage)
     {
@@ -106,7 +126,7 @@ internal static class DagCrypto
     }
 
     /// <summary>
-    /// Brotli compress with canonical parameters for Constellation validation
+    /// Brotli compress with canonical parameters for Constellation validation (quality=2, window=22).
     /// </summary>
     internal static byte[] BrotliCompress(byte[] utf8Json)
     {

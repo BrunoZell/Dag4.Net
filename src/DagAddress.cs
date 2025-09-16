@@ -112,6 +112,7 @@ public sealed class DagAddress
 
     /// <summary>
     /// dag4.js-style data signing. Produces a DER low-S signature and the associated public key.
+    /// The input JSON string is normalized using L0Json.Normalize prior to signing.
     /// </summary>
     public DagDataSignature SignData(string jsonMessage)
     {
@@ -124,6 +125,8 @@ public sealed class DagAddress
 
     /// <summary>
     /// Verify a DER signature produced by SignData for the given message.
+    /// The signature must be an ASN.1 DER hex string (lower/upper case accepted).
+    /// The input JSON string is normalized using L0Json.Normalize prior to verification.
     /// </summary>
     public bool VerifyData(string jsonMessage, string signatureDerHex)
     {
@@ -135,8 +138,8 @@ public sealed class DagAddress
     }
 
     /// <summary>
-    /// Sign canonical JSON for L0/L1 using the Brotli hashing path. Returns a DER low-S signature hex.
-    /// Input will be normalized using L0Json.Normalize.
+    /// Sign JSON for L0/L1 using the Brotli hashing path and return a DER low-S signature.
+    /// The input JSON string is normalized using L0Json.Normalize prior to hashing and signing.
     /// </summary>
     public DerSignature SignL0(string jsonMessage)
     {
